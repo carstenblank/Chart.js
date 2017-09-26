@@ -25,6 +25,7 @@ require('./core/core.tooltip')(Chart);
 
 require('./scales/scale.linearbase')(Chart);
 require('./scales/scale.category')(Chart);
+require('./scales/scale.datatable')(Chart);
 require('./scales/scale.linear')(Chart);
 require('./scales/scale.logarithmic')(Chart);
 require('./scales/scale.radialLinear')(Chart);
