@@ -3,20 +3,6 @@ var defaults = require('../core/core.defaults');
 var helpers = require('../helpers/index');
 var scales = require('../core/core.scale');
 
-function getLineValue(scale, index, offsetGridLines) {
-	var lineValue = scale.getPixelForTick(index);
-
-	if (offsetGridLines) {
-		if (index === 0) {
-			lineValue -= (scale.getPixelForTick(1) - lineValue) / 2;
-		} else {
-			lineValue -= (lineValue - scale.getPixelForTick(index - 1)) / 2;
-		}
-	}
-
-	return lineValue;
-}
-
 function parseFontOptions(options) {
 	var valueOrDefault = helpers.valueOrDefault;
 	var globalDefaults = defaults.global;
@@ -42,15 +28,22 @@ module.exports = function(Chart) {
 
 		// grid line settings
 		gridLines: {
-			offsetGridLines: true
+			offsetGridLines: true,
+			drawTicks: true,
+			tickMarkLength: 5
 		},
 
 		ticks: {
-			padding: 10
+			display: true,
+			labelOffset: 0,
+			padding: 10, // grid from ticks distance
+			minRotation: 0
 		},
 
 		dataTable: {
-			padding: 10
+			display: true,
+			lineWidth: 0.1,
+			color: "rgba(0,0,0,1.0)"
 		},
 
 		fullWidth: true
@@ -83,6 +76,55 @@ module.exports = function(Chart) {
 	};
 
 	var DatasetScale = Chart.Scale.extend({
+
+		offsetByTickLength: function() {
+			var gridOptions = this.getGridLineOptions();
+			return gridOptions.drawTicks ? gridOptions.tickMarkLength : 0;
+		},
+
+		getGridLineOptions: function () {
+			return this.options.gridLines;
+		},
+
+		getDataTableOptions: function () {
+			return this.options.dataTable;
+		},
+
+		getScaleLabelOptions: function () {
+			return this.options.scaleLabel;
+		},
+
+		getMinorTickOptions: function () {
+			return this.options.ticks.minor;
+		},
+
+		getMajorTickOptions: function () {
+			return this.options.ticks.major;
+		},
+
+		getMinorTickFontOptions: function () {
+			return parseFontOptions(this.options.ticks.minor);
+		},
+
+		getMajorTickFontOptions: function () {
+			return parseFontOptions(this.options.ticks.major || this.options.ticks.minor);
+		},
+
+		getLineValue: function (index, offsetGridLines) {
+			var me = this;
+			var lineValue = me.getPixelForTick(index);
+
+			if (offsetGridLines) {
+				if (index === 0) {
+					lineValue -= (me.getPixelForTick(1) - lineValue) / 2;
+				} else {
+					lineValue -= (lineValue - me.getPixelForTick(index - 1)) / 2;
+				}
+			}
+
+			return lineValue;
+		},
+
 		/**
 		 * Internal function to get the correct labels. If data.xLabels or data.yLabels are defined, use those
 		 * else fall back to data.labels
@@ -189,44 +231,6 @@ module.exports = function(Chart) {
 		// Used to get data value locations.  Value can either be an index or a numerical value
 		// This is the center of each of the label data.
 		getPixelForValue: function(value, index) {
-			// var me = this;
-			// // offset: label on tick or between two ticks
-			// var offset = me.options.offset;
-			// // 1 is added because we need the length but we have the indexes
-			// var offsetAmt = Math.max((me.maxIndex + 1 - me.minIndex - (offset ? 0 : 1)), 1);
-            //
-			// // If value is a data object, then index is the index in the data array,
-			// // not the index of the scale. We need to change that.
-			// // var valueCategory;
-			// // if (value !== undefined && value !== null) {
-			// // 	valueCategory = me.isHorizontal() ? value.x : value.y;
-			// // }
-			// // if (valueCategory !== undefined || (value !== undefined && isNaN(index))) {
-			// // 	var labels = me.getLabels();
-			// // 	value = valueCategory || value;
-			// // 	var idx = labels.indexOf(value);
-			// // 	index = idx !== -1 ? idx : index;
-			// // }
-            //
-			// if (me.isHorizontal()) {
-			// 	var valueWidth = me.width / offsetAmt;
-			// 	var widthOffset = (valueWidth * (index - me.minIndex));
-            //
-			// 	if (offset) {
-			// 		widthOffset += (valueWidth / 2);
-			// 	}
-            //
-			// 	return me.left + Math.round(widthOffset);
-			// }
-			// var valueHeight = me.height / offsetAmt;
-			// var heightOffset = (valueHeight * (index - me.minIndex));
-            //
-			// if (offset) {
-			// 	heightOffset += (valueHeight / 2);
-			// }
-            //
-			// return me.top + Math.round(heightOffset);
-
 			var me = this;
 			var offset = me.options.offset;
 			if (me.isHorizontal()) {
@@ -251,7 +255,7 @@ module.exports = function(Chart) {
 		},
 
 		getPixelForTick: function(index) {
-			return this.getPixelForValue(this.ticks[index], index + this.minIndex, null);
+			return this.getPixelForValue(this.ticks[index], index + this.minIndex);
 		},
 
 		// getValueForPixel: function(pixel) {
@@ -307,10 +311,8 @@ module.exports = function(Chart) {
 				return;
 			}
 
-			var context = me.ctx;
 			var globalDefaults = defaults.global;
 			var optionTicks = options.ticks.minor;
-			var optionMajorTicks = options.ticks.major || optionTicks;
 			var gridLines = options.gridLines;
 			var scaleLabel = options.scaleLabel;
 			var dataTable = options.dataTable;
@@ -318,33 +320,23 @@ module.exports = function(Chart) {
 			var isRotated = me.labelRotation !== 0;
 			var isHorizontal = me.isHorizontal();
 
-			var ticks = optionTicks.autoSkip ? me._autoSkip(me.getTicks()) : me.getTicks();
-			var tickFontColor = helpers.valueOrDefault(optionTicks.fontColor, globalDefaults.defaultFontColor);
-			var tickFont = parseFontOptions(optionTicks);
-			var majorTickFontColor = helpers.valueOrDefault(optionMajorTicks.fontColor, globalDefaults.defaultFontColor);
-			var majorTickFont = parseFontOptions(optionMajorTicks);
-
-			var tl = gridLines.drawTicks ? gridLines.tickMarkLength : 0;
-
-			var scaleLabelFontColor = helpers.valueOrDefault(scaleLabel.fontColor, globalDefaults.defaultFontColor);
-			var scaleLabelFont = parseFontOptions(scaleLabel);
-			var scaleLabelPadding = helpers.options.toPadding(scaleLabel.padding);
 			var labelRotationRadians = helpers.toRadians(me.labelRotation);
 
-			var itemsToDraw = [];
+			var tl = me.offsetByTickLength();
 
 			var xTickStart = options.position === 'right' ? me.left : me.right - tl;
 			var xTickEnd = options.position === 'right' ? me.left + tl : me.right;
 			var yTickStart = options.position === 'bottom' ? me.top : me.bottom - tl;
 			var yTickEnd = options.position === 'bottom' ? me.top + tl : me.bottom;
 
+			var ticks = optionTicks.autoSkip ? me._autoSkip(me.getTicks()) : me.getTicks();
+			var itemsToDraw = [];
 			helpers.each(ticks, function(tick, index) {
 				// autoskipper skipped this tick (#4635)
 				if (tick.label === undefined) {
 					return;
 				}
 
-				var label = tick.label;
 				var lineWidth, lineColor, borderDash, borderDashOffset;
 				if (index === me.zeroLineIndex && options.offset === gridLines.offsetGridLines) {
 					// Draw the first index specially
@@ -366,21 +358,21 @@ module.exports = function(Chart) {
 				var tickPadding = optionTicks.padding;
 
 				if (isHorizontal) {
-					var labelYOffset = tl + tickPadding;
+					var labelYOffset = me.offsetByTickLength() + tickPadding;
 					var magicOffset = 3; // TODO MAGIC
 					if (options.position === 'bottom') {
 						// bottom
 						textBaseline = 'top'; // !isRotated ? 'top' : 'middle';
 						textAlign = 'center'; // !isRotated ? 'center' : 'right';
-						labelY = me.top + labelYOffset + magicOffset + getLabelTextHeightPixels(me, label)/2;
+						labelY = me.top + labelYOffset + magicOffset + getLabelTextHeightPixels(me, tick.label)/2;
 					} else {
 						// top
 						textBaseline = !isRotated ? 'bottom' : 'middle';
 						textAlign = !isRotated ? 'center' : 'left';
-						labelY = me.bottom - labelYOffset - magicOffset - getLabelTextHeightPixels(me, label)/2;
+						labelY = me.bottom - labelYOffset - magicOffset - getLabelTextHeightPixels(me, tick.label)/2;
 					}
 
-					var xLineValue = getLineValue(me, index, gridLines.offsetGridLines && ticks.length > 1);
+					var xLineValue = me.getLineValue(index, gridLines.offsetGridLines && ticks.length > 0);
 					if (xLineValue < me.left) {
 						lineColor = 'rgba(0,0,0,0)';
 					}
@@ -407,7 +399,7 @@ module.exports = function(Chart) {
 
 					labelX = isLeft ? me.right - labelXOffset : me.left + labelXOffset;
 
-					var yLineValue = getLineValue(me, index, gridLines.offsetGridLines && ticks.length > 1);
+					var yLineValue = me.getLineValue(index, gridLines.offsetGridLines && ticks.length > 1);
 					if (yLineValue < me.top) {
 						lineColor = 'rgba(0,0,0,0)';
 					}
@@ -438,189 +430,230 @@ module.exports = function(Chart) {
 					glBorderDash: borderDash,
 					glBorderDashOffset: borderDashOffset,
 					rotation: -1 * labelRotationRadians,
-					label: label,
-					major: tick.major,
+					label: tick.label,
+					major: true, // because of datatable we want special significance
 					textBaseline: textBaseline,
 					textAlign: textAlign
 				});
 			});
 
 			// Draw all of the tick labels, tick marks, and grid lines at the correct places
-			helpers.each(itemsToDraw, function(itemToDraw) {
-				if (gridLines.display) {
-					context.save();
-					context.lineWidth = itemToDraw.glWidth;
-					context.strokeStyle = itemToDraw.glColor;
-					if (context.setLineDash) {
-						context.setLineDash(itemToDraw.glBorderDash);
-						context.lineDashOffset = itemToDraw.glBorderDashOffset;
-					}
+			var key;
+			for(key in itemsToDraw)
+				me.drawTick(itemsToDraw[key]);
 
-					context.beginPath();
+			if (dataTable.display && me.getLabelDataDim().n > 0)
+				me.drawDataTable();
 
-					if (gridLines.drawTicks) {
-						context.moveTo(itemToDraw.tx1, itemToDraw.ty1);
-						context.lineTo(itemToDraw.tx2, itemToDraw.ty2);
-					}
+			if (scaleLabel.display)
+				me.drawScaleLabels();
 
-					if (gridLines.drawOnChartArea) {
-						context.moveTo(itemToDraw.x1, itemToDraw.y1);
-						context.lineTo(itemToDraw.x2, itemToDraw.y2);
-					}
+			if (gridLines.drawBorder)
+				me.drawGridLineBorder();
+		},
 
-					context.stroke();
-					context.restore();
+		drawTick: function(tickToDraw) {
+			var me = this;
+			var grindLinesOptions = me.getGridLineOptions();
+			var minorTickOptions = me.getMinorTickOptions();
+			var minorTickFontColor = helpers.valueOrDefault(minorTickOptions.fontColor, defaults.global.defaultFontColor);
+			var minorTickFontOptions = me.getMinorTickFontOptions();
+
+			var majorTickOptions = me.getMajorTickOptions();
+			var majorTickFontColor = helpers.valueOrDefault(majorTickOptions.fontColor, defaults.global.defaultFontColor);
+			var majorTickFontOptions = me.getMajorTickFontOptions();
+
+			if (grindLinesOptions.display) {
+				me.ctx.save();
+				me.ctx.lineWidth = tickToDraw.glWidth;
+				me.ctx.strokeStyle = tickToDraw.glColor;
+				if (me.ctx.setLineDash) {
+					me.ctx.setLineDash(tickToDraw.glBorderDash);
+					me.ctx.lineDashOffset = tickToDraw.glBorderDashOffset;
 				}
 
-				if (optionTicks.display) {
-					// Make sure we draw text in the correct color and font
-					context.save();
-					context.translate(itemToDraw.labelX, itemToDraw.labelY);
-					context.rotate(itemToDraw.rotation);
-					context.font = itemToDraw.major ? majorTickFont.font : tickFont.font;
-					context.fillStyle = itemToDraw.major ? majorTickFontColor : tickFontColor;
-					context.textBaseline = itemToDraw.textBaseline;
-					context.textAlign = itemToDraw.textAlign;
+				me.ctx.beginPath();
 
-					var label = itemToDraw.label;
-					if (helpers.isArray(label)) {
-						for (var i = 0, y = 0; i < label.length; ++i) {
-							// We just make sure the multiline element is a string here..
-							context.fillText('' + label[i], 0, y);
-							// apply same lineSpacing as calculated @ L#320
-							y += (tickFont.size * 1.5);
-						}
-					} else {
-						context.fillText(label, 0, 0);
-					}
-					context.restore();
+				if (grindLinesOptions.drawTicks) {
+					me.ctx.moveTo(tickToDraw.tx1, tickToDraw.ty1);
+					me.ctx.lineTo(tickToDraw.tx2, tickToDraw.ty2);
 				}
-			});
 
+				if (grindLinesOptions.drawOnChartArea) {
+					me.ctx.moveTo(tickToDraw.x1, tickToDraw.y1);
+					me.ctx.lineTo(tickToDraw.x2, tickToDraw.y2);
+				}
+
+				me.ctx.stroke();
+				me.ctx.restore();
+			}
+
+			if (minorTickOptions.display) {
+				// Make sure we draw text in the correct color and font
+				me.ctx.save();
+				me.ctx.translate(tickToDraw.labelX, tickToDraw.labelY);
+				me.ctx.rotate(tickToDraw.rotation);
+				me.ctx.font = tickToDraw.major ? majorTickFontOptions.font : minorTickFontOptions.font;
+				me.ctx.fillStyle = tickToDraw.major ? majorTickFontColor : minorTickFontColor;
+				me.ctx.textBaseline = tickToDraw.textBaseline;
+				me.ctx.textAlign = tickToDraw.textAlign;
+
+				var label = tickToDraw.label;
+				if (helpers.isArray(label)) {
+					for (var i = 0, y = 0; i < label.length; ++i) {
+						// We just make sure the multiline element is a string here..
+						me.ctx.fillText('' + label[i], 0, y);
+						// apply same lineSpacing as calculated @ L#320
+						y += (minorTickFontOptions.size * 1.5);
+					}
+				} else {
+					me.ctx.fillText(label, 0, 0);
+				}
+				me.ctx.restore();
+			}
+		},
+
+		getYDataTableRow: function(row) {
+			var me = this;
+			var rotationExtra = row > 0 ? getLabelsMaxTextHeightPixels(me) : 0;
+			var offset = me.options.position === 'bottom' ? me.options.ticks.minor.padding : 0;
+			return  me.top + me.offsetByTickLength() + me.getMinorTickFontOptions().size * 1.5 * row + offset + rotationExtra;
+		},
+
+		getXDataTableColumn: function(col) {
+			var me = this;
+			return col === -1
+				? me.left
+				: me.getLineValue(col, me.getGridLineOptions().offsetGridLines && me.getLabelDataDim().m > 0)
+				+ helpers.aliasPixel(me.getGridLineOptions().zeroLineWidth);
+		},
+
+		getXYDataTableCellText: function(n, m) {
+			var me = this;
+			var x = (me.getXDataTableColumn(n - 1) + me.getXDataTableColumn(n))/2;
+			var y = (me.getYDataTableRow(m + 1) + me.getYDataTableRow(m + 2))/2;
+			return { x: x, y: y }
+		},
+
+		drawDataTable: function () {
+			var me = this;
+
+			// Draw the line at the edge of the axis
+			ctx.lineWidth = helpers.valueOrDefault(me.getDataTableOptions().lineWidth, 0.1);
+			ctx.strokeStyle = helpers.valueOrDefault(me.getDataTableOptions().color, 0);
+			ctx.font = me.getMajorTickFontOptions().font;
+			ctx.textBaseline = 'center';
+			ctx.textAlign = 'center';
+
+			// Data Set Labels (Row Labels)
+			var visibleDataSets = me.getVisibleDataSets();
+
+			var i;
+			for (i = 0; i < visibleDataSets.length; i++) {
+				var dataSet = visibleDataSets[i];
+				ctx.fillStyle = dataSet.borderColor;
+				var textPos = me.getXYDataTableCellText(0,i);
+				ctx.fillText(dataSet.label, textPos.x, textPos.y);
+				for (var j = 0; j < dataSet.data.length; j++) {
+					ctx.fillStyle = dataSet.backgroundColor;
+					textPos = me.getXYDataTableCellText(j + 1,i);
+					ctx.fillText(dataSet.data[j], textPos.x, textPos.y);
+				}
+			}
+
+			// Horizontal Lines
 			var tableDim = me.getLabelDataDim();
-			if (dataTable.display && tableDim.n > 0) {
-				// Draw the line at the edge of the axis
-				context.lineWidth = helpers.valueOrDefault(dataTable.lineWidth, 0.1);
-				context.strokeStyle = helpers.valueOrDefault(dataTable.color, 0);
-				ticks = me.getTicks();
-
-
-				var pixelsRow = function(row) {
-					var rotationExtra = row > 0 ? getLabelsMaxTextHeightPixels(me) : 0;
-					var offset = options.position === 'bottom' ? optionTicks.padding : 0;
-					return  me.top + tl + tickFont.size * 1.5 * row + offset + rotationExtra;
-				};
-
-				var pixelsColumn = function(col) {
-					return col === -1
-						? me.left
-						: getLineValue(me, col, gridLines.offsetGridLines && tableDim.m > 1) + helpers.aliasPixel(gridLines.zeroLineWidth);
-				};
-
-				var cellTextPos = function(n,m) {
-					return { x: (pixelsColumn(n - 1) + pixelsColumn(n))/2, y: (pixelsRow(m + 1) + pixelsRow(m + 2))/2 }
-				};
-
-				var i;
-				// Row Labels
-				var dataSets = me.getVisibleDataSets();
-				context.font = majorTickFont.font;
-				context.textBaseline = 'center';
-				context.textAlign = 'center';
-				for (i = 0; i < dataSets.length; i++) {
-					var dataSet = dataSets[i];
-					context.fillStyle = dataSet.borderColor;
-					var textPos = cellTextPos(0,i);
-					context.fillText(dataSet.label, textPos.x, textPos.y);
-					for (var j = 0; j < dataSet.data.length; j++) {
-						context.fillStyle = tickFontColor;
-						textPos = cellTextPos(j + 1,i);
-						context.fillText(dataSet.data[j], textPos.x, textPos.y);
-					}
-				}
-
-				// Horizontal Lines
-				context.beginPath();
-				var right = pixelsColumn(tableDim.m);
-				for(i = 0; i <= tableDim.n + 1; i++) {
-					var left = i === 0 ? pixelsColumn(0) : tableDim.n === 0 ? pixelsColumn(0) : pixelsColumn(-1);
-					var y = pixelsRow(i);
-					context.moveTo(left, y);
-					context.lineTo(right, y);
-				}
-
-				// Vertical Lines
-				var cellX = pixelsColumn(-1);
-				context.moveTo(cellX, pixelsRow(1));
-				context.lineTo(cellX, pixelsRow(tableDim.n + 1));
-				var yStart = pixelsRow(0);
-				var yEnd = pixelsRow(tableDim.n + 1);
-				for(i = 0; i <= tableDim.m + 1; i++) {
-					cellX = pixelsColumn(i);
-					context.moveTo(cellX, yStart);
-					context.lineTo(cellX, yEnd);
-				}
-				if (dataTable.lineWidth !== 0) context.stroke();
-				else context.restore();
+			ctx.beginPath();
+			var right = me.getXDataTableColumn(tableDim.m);
+			for(i = 0; i <= tableDim.n + 1; i++) {
+				var left = i === 0 ? me.getXDataTableColumn(0) : tableDim.n === 0 ? me.getXDataTableColumn(0) : me.getXDataTableColumn(-1);
+				var y = me.getYDataTableRow(i);
+				ctx.moveTo(left, y);
+				ctx.lineTo(right, y);
 			}
 
-			if (scaleLabel.display) {
-				// Draw the scale label
-				var scaleLabelX;
-				var scaleLabelY;
-				var rotation = 0;
-				var halfLineHeight = parseLineHeight(scaleLabel) / 2;
-
-				if (isHorizontal) {
-					scaleLabelX = me.left + ((me.right - me.left) / 2); // midpoint of the width
-					scaleLabelY = options.position === 'bottom'
-						? me.bottom - halfLineHeight - scaleLabelPadding.bottom
-						: me.top + halfLineHeight + scaleLabelPadding.top;
-				} else {
-					var isLeft = options.position === 'left';
-					scaleLabelX = isLeft
-						? me.left + halfLineHeight + scaleLabelPadding.top
-						: me.right - halfLineHeight - scaleLabelPadding.top;
-					scaleLabelY = me.top + ((me.bottom - me.top) / 2);
-					rotation = isLeft ? -0.5 * Math.PI : 0.5 * Math.PI;
-				}
-
-				context.save();
-				context.translate(scaleLabelX, scaleLabelY);
-				context.rotate(rotation);
-				context.textAlign = 'center';
-				context.textBaseline = 'middle';
-				context.fillStyle = scaleLabelFontColor; // render in correct colour
-				context.font = scaleLabelFont.font;
-				context.fillText(scaleLabel.labelString, 0, 0);
-				context.restore();
+			// Vertical Lines
+			var cellX = me.getXDataTableColumn(-1);
+			ctx.moveTo(cellX, me.getYDataTableRow(1));
+			ctx.lineTo(cellX, me.getYDataTableRow(tableDim.n + 1));
+			var yStart = me.getYDataTableRow(0);
+			var yEnd = me.getYDataTableRow(tableDim.n + 1);
+			for(i = 0; i <= tableDim.m + 1; i++) {
+				cellX = me.getXDataTableColumn(i);
+				ctx.moveTo(cellX, yStart);
+				ctx.lineTo(cellX, yEnd);
 			}
 
-			if (gridLines.drawBorder) {
-				// Draw the line at the edge of the axis
-				context.lineWidth = helpers.valueAtIndexOrDefault(gridLines.lineWidth, 0);
-				context.strokeStyle = helpers.valueAtIndexOrDefault(gridLines.color, 0);
-				var x1 = me.left;
-				var x2 = me.right;
-				var y1 = me.top;
-				var y2 = me.bottom;
+			// Draw
+			if (me.getDataTableOptions().lineWidth !== 0) ctx.stroke();
+			else ctx.restore();
+		},
 
-				var aliasPixel = helpers.aliasPixel(context.lineWidth);
-				if (isHorizontal) {
-					y1 = y2 = options.position === 'top' ? me.bottom : me.top;
-					y1 += aliasPixel;
-					y2 += aliasPixel;
-				} else {
-					x1 = x2 = options.position === 'left' ? me.right : me.left;
-					x1 += aliasPixel;
-					x2 += aliasPixel;
-				}
+		drawScaleLabels: function() {
+			var me = this;
+			var scaleLabelOptions = me.getScaleLabelOptions();
+			var scaleLabelPadding = helpers.options.toPadding(scaleLabelOptions.padding);
+			var scaleLabelFont = parseFontOptions(scaleLabelOptions);
+			var scaleLabelFontColor = helpers.valueOrDefault(scaleLabelOptions.fontColor, defaults.global.defaultFontColor);
 
-				context.beginPath();
-				context.moveTo(x1, y1);
-				context.lineTo(x2, y2);
-				context.stroke();
+			// Draw the scale label
+			var scaleLabelX;
+			var scaleLabelY;
+			var rotation = 0;
+			var halfLineHeight = parseLineHeight(scaleLabelOptions) / 2;
+
+			if (me.isHorizontal()) {
+				scaleLabelX = me.left + ((me.right - me.left) / 2); // midpoint of the width
+				scaleLabelY = options.position === 'bottom'
+					? me.bottom - halfLineHeight - scaleLabelPadding.bottom
+					: me.top + halfLineHeight + scaleLabelPadding.top;
+			} else {
+				var isLeft = options.position === 'left';
+				scaleLabelX = isLeft
+					? me.left + halfLineHeight + scaleLabelPadding.top
+					: me.right - halfLineHeight - scaleLabelPadding.top;
+				scaleLabelY = me.top + ((me.bottom - me.top) / 2);
+				rotation = isLeft ? -0.5 * Math.PI : 0.5 * Math.PI;
 			}
+
+			me.ctx.save();
+			me.ctx.translate(scaleLabelX, scaleLabelY);
+			me.ctx.rotate(rotation);
+			me.ctx.textAlign = 'center';
+			me.ctx.textBaseline = 'middle';
+			me.ctx.fillStyle = scaleLabelFontColor; // render in correct colour
+			me.ctx.font = scaleLabelFont.font;
+			me.ctx.fillText(scaleLabelOptions.labelString, 0, 0);
+			me.ctx.restore();
+		},
+
+		drawGridLineBorder: function () {
+			var me = this;
+			var gridLinesOptions = me.getGridLineOptions();
+
+			// Draw the line at the edge of the axis
+			me.ctx.lineWidth = helpers.valueAtIndexOrDefault(gridLinesOptions.lineWidth, 0);
+			me.ctx.strokeStyle = helpers.valueAtIndexOrDefault(gridLinesOptions.color, 0);
+			var x1 = me.left;
+			var x2 = me.right;
+			var y1 = me.top;
+			var y2 = me.bottom;
+
+			var aliasPixel = helpers.aliasPixel(me.ctx.lineWidth);
+			if (me.isHorizontal()) {
+				y1 = y2 = me.options.position === 'top' ? me.bottom : me.top;
+				y1 += aliasPixel;
+				y2 += aliasPixel;
+			} else {
+				x1 = x2 = me.options.position === 'left' ? me.right : me.left;
+				x1 += aliasPixel;
+				x2 += aliasPixel;
+			}
+
+			me.ctx.beginPath();
+			me.ctx.moveTo(x1, y1);
+			me.ctx.lineTo(x2, y2);
+			me.ctx.stroke();
 		}
 	});
 
