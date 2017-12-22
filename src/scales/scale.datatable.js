@@ -539,11 +539,11 @@ module.exports = function(Chart) {
 			var me = this;
 
 			// Draw the line at the edge of the axis
-			ctx.lineWidth = helpers.valueOrDefault(me.getDataTableOptions().lineWidth, 0.1);
-			ctx.strokeStyle = helpers.valueOrDefault(me.getDataTableOptions().color, 0);
-			ctx.font = me.getMajorTickFontOptions().font;
-			ctx.textBaseline = 'center';
-			ctx.textAlign = 'center';
+			me.ctx.lineWidth = helpers.valueOrDefault(me.getDataTableOptions().lineWidth, 0.1);
+			me.ctx.strokeStyle = helpers.valueOrDefault(me.getDataTableOptions().color, 0);
+			me.ctx.font = me.getMajorTickFontOptions().font;
+			me.ctx.textBaseline = 'center';
+			me.ctx.textAlign = 'center';
 
 			// Data Set Labels (Row Labels)
 			var visibleDataSets = me.getVisibleDataSets();
@@ -551,42 +551,42 @@ module.exports = function(Chart) {
 			var i;
 			for (i = 0; i < visibleDataSets.length; i++) {
 				var dataSet = visibleDataSets[i];
-				ctx.fillStyle = dataSet.borderColor;
+				me.ctx.fillStyle = dataSet.backgroundColor;
 				var textPos = me.getXYDataTableCellText(0,i);
-				ctx.fillText(dataSet.label, textPos.x, textPos.y);
+				me.ctx.fillText(dataSet.label, textPos.x, textPos.y);
 				for (var j = 0; j < dataSet.data.length; j++) {
-					ctx.fillStyle = dataSet.backgroundColor;
+					me.ctx.fillStyle = dataSet.backgroundColor;
 					textPos = me.getXYDataTableCellText(j + 1,i);
-					ctx.fillText(dataSet.data[j], textPos.x, textPos.y);
+					me.ctx.fillText(dataSet.data[j], textPos.x, textPos.y);
 				}
 			}
 
 			// Horizontal Lines
 			var tableDim = me.getLabelDataDim();
-			ctx.beginPath();
+			me.ctx.beginPath();
 			var right = me.getXDataTableColumn(tableDim.m);
 			for(i = 0; i <= tableDim.n + 1; i++) {
 				var left = i === 0 ? me.getXDataTableColumn(0) : tableDim.n === 0 ? me.getXDataTableColumn(0) : me.getXDataTableColumn(-1);
 				var y = me.getYDataTableRow(i);
-				ctx.moveTo(left, y);
-				ctx.lineTo(right, y);
+				me.ctx.moveTo(left, y);
+				me.ctx.lineTo(right, y);
 			}
 
 			// Vertical Lines
 			var cellX = me.getXDataTableColumn(-1);
-			ctx.moveTo(cellX, me.getYDataTableRow(1));
-			ctx.lineTo(cellX, me.getYDataTableRow(tableDim.n + 1));
+			me.ctx.moveTo(cellX, me.getYDataTableRow(1));
+			me.ctx.lineTo(cellX, me.getYDataTableRow(tableDim.n + 1));
 			var yStart = me.getYDataTableRow(0);
 			var yEnd = me.getYDataTableRow(tableDim.n + 1);
 			for(i = 0; i <= tableDim.m + 1; i++) {
 				cellX = me.getXDataTableColumn(i);
-				ctx.moveTo(cellX, yStart);
-				ctx.lineTo(cellX, yEnd);
+				me.ctx.moveTo(cellX, yStart);
+				me.ctx.lineTo(cellX, yEnd);
 			}
 
 			// Draw
-			if (me.getDataTableOptions().lineWidth !== 0) ctx.stroke();
-			else ctx.restore();
+			if (me.getDataTableOptions().lineWidth !== 0) me.ctx.stroke();
+			else me.ctx.restore();
 		},
 
 		drawScaleLabels: function() {
