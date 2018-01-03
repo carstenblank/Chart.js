@@ -234,10 +234,21 @@ module.exports = function(Chart) {
 			var me = this;
 			var offset = me.options.offset;
 			if (me.isHorizontal()) {
-				var innerWidth = me.width - (me.paddingLeft + me.paddingRight);
+				// The max text width of each visible dataSet shall be taken
+				// TODO: use caching to speed up
+				var dataSetLabelMaxLength = helpers.longestText(me.ctx,
+					me.getMinorTickFontOptions().font,
+					me.getVisibleDataSets().map(function (ds) {
+						return ds.label;
+					}),
+					null);
+
+				// First reduce data table row label (data set label) width for tick width
+				var innerWidth = me.width - (me.paddingLeft + me.paddingRight) - dataSetLabelMaxLength;
 				var tickWidth = innerWidth / Math.max((me._ticks.length - (offset ? 0 : 1)), 1);
 				var pixel = (tickWidth * index) + me.paddingLeft;
 
+				// Offset ticks add half a tickWidth.
 				if (offset) {
 					pixel += tickWidth / 2;
 				}
@@ -248,6 +259,10 @@ module.exports = function(Chart) {
 				var finalVal = me.left + Math.round(pixel);
 				//var finalVal = Math.round(pixel);
 				finalVal += me.isFullWidth() ? me.margins.left : 0;
+
+				// Add offset due to the data table row label (data set label)
+				finalVal += dataSetLabelMaxLength;
+
 				return finalVal;
 			}
 			var innerHeight = me.height - (me.paddingTop + me.paddingBottom);
@@ -515,9 +530,19 @@ module.exports = function(Chart) {
 
 		getYDataTableRow: function(row) {
 			var me = this;
-			var rotationExtra = row > 0 ? getLabelsMaxTextHeightPixels(me) : 0;
+
+			// these three lines are equivalent to the draw computation in the labelY value
 			var offset = me.options.position === 'bottom' ? me.options.ticks.minor.padding : 0;
-			return  me.top + me.offsetByTickLength() + me.getMinorTickFontOptions().size * 1.5 * row + offset + rotationExtra;
+			var labelYOffset = me.offsetByTickLength() + offset;
+			var magicOffset = 0;
+
+			// This next line takes into account the rotation of the tick labels
+			var rotationExtra = row > 0 ? getLabelsMaxTextHeightPixels(me) : 0;
+
+			//
+			var rowYOffset = me.getMinorTickFontOptions().size * 1.5 * row;
+
+			return  me.top + labelYOffset+ magicOffset + rotationExtra + rowYOffset;
 		},
 
 		getXDataTableColumn: function(col) {
@@ -531,7 +556,7 @@ module.exports = function(Chart) {
 		getXYDataTableCellText: function(n, m) {
 			var me = this;
 			var x = (me.getXDataTableColumn(n - 1) + me.getXDataTableColumn(n))/2;
-			var y = (me.getYDataTableRow(m + 1) + me.getYDataTableRow(m + 2))/2;
+			var y = me.getYDataTableRow(m + 2) - 2;
 			return { x: x, y: y }
 		},
 
@@ -542,7 +567,7 @@ module.exports = function(Chart) {
 			me.ctx.lineWidth = helpers.valueOrDefault(me.getDataTableOptions().lineWidth, 0.1);
 			me.ctx.strokeStyle = helpers.valueOrDefault(me.getDataTableOptions().color, 0);
 			me.ctx.font = me.getMajorTickFontOptions().font;
-			me.ctx.textBaseline = 'center';
+			me.ctx.textBaseline = 'bottom';
 			me.ctx.textAlign = 'center';
 
 			// Data Set Labels (Row Labels)
